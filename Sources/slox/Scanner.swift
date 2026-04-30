@@ -27,7 +27,7 @@ class Scanner {
         "while": .while,
     ]
 
-    init(source: String) {
+    init(_ source: String) {
         self.source = Array(source)
     }
 
@@ -84,17 +84,17 @@ class Scanner {
             } else if c.isLetter {
                 identifier()
             } else {
-                slox.error(line: line, message: "Unexpected character.")
+                Lox.error(line: line, message: "Unexpected character.")
             }
         }
     }
 
     private func identifier() {
-        while peek().isNumber, peek().isLetter {
+        while peek().isNumber || peek().isLetter {
             advance()
         }
 
-        let text: String = String(source[start..<current])
+        let text = String(source[start ..< current])
         let type: TokenType = Scanner.keywords[text] ?? .identifier
 
         addToken(type)
@@ -113,7 +113,10 @@ class Scanner {
             }
         }
 
-        addToken(type: .number, literal: String(source[start ..< current]))
+        let text = String(source[start ..< current])
+        let value = Double(text)
+
+        addToken(type: .number, literal: value)
     }
 
     private func string() {
@@ -123,7 +126,7 @@ class Scanner {
         }
 
         if isEnd() {
-            slox.error(line: line, message: "Unterminated string.")
+            Lox.error(line: line, message: "Unterminated string.")
         }
 
         advance()
@@ -133,7 +136,7 @@ class Scanner {
     }
 
     private func peekNext() -> Character {
-        if current + 1 > source.count { return "\0" }
+        if current + 1 >= source.count { return "\0" }
         return source[current + 1]
     }
 
@@ -150,6 +153,7 @@ class Scanner {
         return true
     }
 
+    @discardableResult
     private func advance() -> Character {
         let new_char = source[current]
         current += 1

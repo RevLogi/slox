@@ -2,7 +2,7 @@ import Foundation
 
 @main
 @MainActor
-struct slox {
+struct Lox {
     static var hadError = false
 
     static func main() {
@@ -30,6 +30,10 @@ struct slox {
     private static func runPrompt() {
         print("slox > ", terminator: "")
         while let line = readLine() {
+            if line == "exit" || line == "quit" {
+                print("exit")
+                break
+            }
             run(source: line)
             hadError = false
             print("slox > ", terminator: "")
@@ -37,16 +41,28 @@ struct slox {
     }
 
     private static func run(source: String) {
-        let scanner = Scanner(source: source)
+        let scanner = Scanner(source)
         let tokens = scanner.scanTokens()
+        let parser = Parser(tokens)
+        let expression = parser.parse()
 
-        for token in tokens {
-            print(token)
+        if hadError {
+            return
         }
+
+        print(expression?.description ?? "")
     }
 
     static func error(line: Int, message: String) {
         report(line: line, where: "", message: message)
+    }
+
+    static func error(at token: Token, message: String) {
+        if token.type == .eof {
+            report(line: token.line, where: " at End", message: message)
+        } else {
+            report(line: token.line, where: "at \(token.lexeme)", message: message)
+        }
     }
 
     private static func report(line: Int, where: String, message: String) {

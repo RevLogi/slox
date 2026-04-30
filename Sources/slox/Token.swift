@@ -2,7 +2,7 @@ import Foundation
 
 enum TokenType {
     case left_paren, right_paren, left_brace, right_brace
-    case comma, dot, minus, plus, semicolon, slash, star
+    case comma, dot, minus, plus, colon, semicolon, slash, star, question
 
     case bang, bang_equal
     case equal, equal_equal
