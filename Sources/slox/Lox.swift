@@ -3,7 +3,10 @@ import Foundation
 @main
 @MainActor
 struct Lox {
+    static let interpreter = Interpreter()
+
     static var hadError = false
+    static var hadRuntimeError = false
 
     static func main() {
         let args = CommandLine.arguments
@@ -21,6 +24,8 @@ struct Lox {
         do {
             let contents = try String(contentsOfFile: path)
             run(source: contents)
+            if hadError { exit(65) }
+            if hadRuntimeError { exit(70) }
         } catch {
             print("Error: Could not read file in \(path)")
             exit(74)
@@ -44,13 +49,12 @@ struct Lox {
         let scanner = Scanner(source)
         let tokens = scanner.scanTokens()
         let parser = Parser(tokens)
-        let expression = parser.parse()
 
-        if hadError {
+        guard let expression = parser.parse(), !hadError else {
             return
         }
 
-        print(expression?.description ?? "")
+        interpreter.interpret(expression)
     }
 
     static func error(line: Int, message: String) {
@@ -68,5 +72,10 @@ struct Lox {
     private static func report(line: Int, where: String, message: String) {
         fputs("[line \(line)] Error \(`where`): \(message)\n", stderr)
         hadError = true
+    }
+
+    static func runtimeError(_ error: RuntimeError) {
+        fputs("\(error.message)\n[line \(error.token.line)]", stderr)
+        hadRuntimeError = true
     }
 }

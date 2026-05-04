@@ -16,7 +16,7 @@ enum TokenType {
     case eof
 }
 
-struct Token: CustomStringConvertible {
+struct Token: CustomStringConvertible, @unchecked Sendable {
     let type: TokenType
     let lexeme: String
     let literal: Any?
