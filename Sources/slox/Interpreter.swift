@@ -2,17 +2,13 @@ import Foundation
 
 @MainActor
 class Interpreter {
-    enum LoxValue {
-        case number(Double)
-        case string(String)
-        case boolean(Bool)
-        case `nil`
-    }
+    private var environment = Environment()
 
-    func interpret(_ expr: Expr) {
+    func interpret(_ statements: [Stmt]) {
         do {
-            let value: LoxValue = try eval(expr)
-            print(stringify(value))
+            for statement in statements {
+                try execute(statement)
+            }
         } catch let e as RuntimeError {
             Lox.runtimeError(e)
         } catch {
@@ -33,8 +29,46 @@ class Interpreter {
         }
     }
 
+    func execute(_ statement: Stmt) throws {
+        switch statement {
+        case let .print(expr):
+            let value: LoxValue = try eval(expr)
+            print(stringify(value))
+        case let .expression(expr):
+            let _: LoxValue = try eval(expr)
+        case let .var(name, expression):
+            if let expr = expression {
+                let value = try eval(expr)
+                environment.define(name.lexeme, value)
+            } else {
+                environment.define(name.lexeme, nil)
+            }
+        case let .block(statements):
+            try executeBlock(statements, Environment(enclosing: environment))
+        }
+    }
+
+    private func executeBlock(_ statements: [Stmt?], _ environment: Environment) throws {
+        let previous: Environment = self.environment
+        defer {
+            self.environment = previous
+        }
+
+        self.environment = environment
+        for statement in statements {
+            if let stmt = statement {
+                try execute(stmt)
+            }
+        }
+    }
+
     func eval(_ expr: Expr) throws -> LoxValue {
         switch expr {
+        case let .assign(name, expr):
+            let value = try eval(expr)
+            try environment.assign(name, value)
+            return value
+
         case let .literal(value):
             if let num = value as? Double {
                 return .number(num)
@@ -116,6 +150,9 @@ class Interpreter {
                 expr = try eval(else_brach)
             }
             return expr
+
+        case let .variable(name):
+            return try environment.get(name)
         }
     }
 

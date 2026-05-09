@@ -23,7 +23,7 @@ struct Lox {
     private static func runFile(path: String) {
         do {
             let contents = try String(contentsOfFile: path)
-            run(source: contents)
+            run(source: contents, isREPL: false)
             if hadError { exit(65) }
             if hadRuntimeError { exit(70) }
         } catch {
@@ -39,22 +39,22 @@ struct Lox {
                 print("exit")
                 break
             }
-            run(source: line)
+            run(source: line, isREPL: true)
             hadError = false
             print("slox > ", terminator: "")
         }
     }
 
-    private static func run(source: String) {
+    private static func run(source: String, isREPL: Bool) {
         let scanner = Scanner(source)
         let tokens = scanner.scanTokens()
-        let parser = Parser(tokens)
+        let parser = Parser(tokens, isREPL)
 
-        guard let expression = parser.parse(), !hadError else {
+        guard let statements = parser.parse(), !hadError else {
             return
         }
 
-        interpreter.interpret(expression)
+        interpreter.interpret(statements)
     }
 
     static func error(line: Int, message: String) {

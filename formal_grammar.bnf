@@ -1,5 +1,23 @@
+program        → declaration* EOF ;
+
+declaration    → varDecl
+               | statement ;
+
+varDecl        → "var" IDENTIFIER ( "=" expression )? ";" ;
+
+statement      → exprStmt
+               | printStmt
+               | block ;
+
+block          → "{" declaration* "}" ;
+
+exprStmt       → expression ";" ;
+printStmt      → "print" expression ";" ;
+
 expression     → comma ;
-comma          → condition ( "," condition )* ;
+comma          → assignment ( "," assignment )* ;
+assignment     → IDENTIFIER "=" assignment
+               | condition ;
 condition      → equality ( "?" expression ":" condition )?
                | equality
 equality       → comparison ( ( "!=" | "==" ) comparison )* ;
@@ -8,5 +26,7 @@ term           → factor ( ( "-" | "+" ) factor )* ;
 factor         → unary ( ( "/" | "*" ) unary )* ;
 unary          → ( "!" | "-" ) unary
                | primary ;
+
 primary        → NUMBER | STRING | "true" | "false" | "nil"
-               | "(" expression ")" ;
+               | "(" expression ")"
+               | IDENTIFIER ;

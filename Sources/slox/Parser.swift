@@ -2,23 +2,89 @@ import Foundation
 
 @MainActor
 class Parser {
-    let tokens: [Token]
-    var current: Int = 0
+    private let tokens: [Token]
+    private var current: Int = 0
+    private let allowExpression: Bool
 
     enum ParserError: Error {
         case failure
     }
 
-    init(_ tokens: [Token]) {
+    init(_ tokens: [Token], _ isREPL: Bool) {
         self.tokens = tokens
+        allowExpression = isREPL
     }
 
-    func parse() -> Expr? {
+    func parse() -> [Stmt]? {
+        var statements: [Stmt] = []
+        while !isEnd() {
+            do {
+                if let decl = try declaration() {
+                    statements.append(decl)
+                }
+            } catch {
+                return nil
+            }
+        }
+        return statements
+    }
+
+    private func declaration() throws -> Stmt? {
         do {
-            return try expression()
+            if match(.var) {
+                return try varDeclaration()
+            }
+            return try statement()
         } catch {
+            synchronize()
             return nil
         }
+    }
+
+    private func varDeclaration() throws -> Stmt {
+        let name: Token = try consume(.identifier, message: "Expected variable name.")
+        var initializer: Expr? = nil
+        if match(.equal) {
+            initializer = try expression()
+        }
+        if !allowExpression {
+            try consume(.semicolon, message: "Expected ';' after variable declaration.")
+        }
+        return .var(name, expression: initializer)
+    }
+
+    private func statement() throws -> Stmt {
+        if match(.print) {
+            return try printStatement()
+        }
+        if match(.left_brace) {
+            return try block()
+        }
+        return try expressionStatement()
+    }
+
+    private func block() throws -> Stmt {
+        var statements: [Stmt?] = []
+        while !check(.right_brace), !isEnd() {
+            try statements.append(declaration() ?? nil)
+        }
+        try consume(.right_brace, message: "Expected '}' after block.")
+        return .block(statements)
+    }
+
+    private func printStatement() throws -> Stmt {
+        let value: Expr = try expression()
+        try consume(.semicolon, message: "Expected ';' after value.")
+        return .print(value)
+    }
+
+    private func expressionStatement() throws -> Stmt {
+        let expr: Expr = try expression()
+        if allowExpression, isEnd() {
+            return .print(expr)
+        }
+        try consume(.semicolon, message: "Expected ';' after expression.")
+        return .expression(expr)
     }
 
     private func expression() throws -> Expr {
@@ -26,14 +92,28 @@ class Parser {
     }
 
     private func comma() throws -> Expr {
-        var expr = try equality()
+        var expr = try assignment()
 
         while match(.comma) {
             let op = previous()
-            let right = try equality()
+            let right = try assignment()
             expr = .binary(left: expr, operator: op, right: right)
         }
 
+        return expr
+    }
+
+    private func assignment() throws -> Expr {
+        let expr: Expr = try conditional()
+        if match(.equal) {
+            let equals: Token = previous()
+            let value: Expr = try assignment()
+            if case let .variable(name) = expr {
+                return .assign(name: name, expr: value)
+            }
+
+            throw error(at: equals, message: "Invalid assignment target.")
+        }
         return expr
     }
 
@@ -121,6 +201,10 @@ class Parser {
             let expr = try expression()
             try consume(.right_paren, message: "Expect ')' after expression.")
             return .grouping(expression: expr)
+        }
+
+        if match(.identifier) {
+            return .variable(name: previous())
         }
 
         if match(.bang_equal, .equal_equal) {

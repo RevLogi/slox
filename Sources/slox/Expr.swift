@@ -1,11 +1,13 @@
 import Foundation
 
 indirect enum Expr {
+    case assign(name: Token, expr: Expr)
     case binary(left: Expr, operator: Token, right: Expr)
     case grouping(expression: Expr)
     case literal(value: Any?)
     case unary(operator: Token, right: Expr)
     case ternary(condition: Expr, _ then_branch: Expr, _ else_branch: Expr)
+    case variable(name: Token)
 }
 
 extension Expr: CustomStringConvertible {
@@ -25,6 +27,7 @@ extension Expr: CustomStringConvertible {
             return parenthesize(name: op.lexeme, exprs: right)
         case let .ternary(condition, then_branch, else_branch):
             return "(? \(condition.description) \(then_branch.description) \(else_branch.description))"
+        default: return ""
         }
     }
 
