@@ -6,6 +6,8 @@ class Parser {
     private var current: Int = 0
     private let allowExpression: Bool
 
+    var currentLoop: LoopType = .none
+
     enum ParserError: Error {
         case failure
     }
@@ -60,6 +62,18 @@ class Parser {
         if match(.left_brace) {
             return try block()
         }
+        if match(.if) {
+            return try ifStatement()
+        }
+        if match(.while) {
+            return try whileStatement()
+        }
+        if match(.for) {
+            return try forStatement()
+        }
+        if match(.break) {
+            return try breakStatement()
+        }
         return try expressionStatement()
     }
 
@@ -78,12 +92,89 @@ class Parser {
         return .print(value)
     }
 
+    private func ifStatement() throws -> Stmt {
+        try consume(.left_paren, message: "Expect '(' after 'if'.")
+        let condition = try expression()
+        try consume(.right_paren, message: "Expect ')' after if condition.")
+
+        let thenBranch: Stmt = try statement()
+        var elseBranch: Stmt? = nil
+        if match(.else) {
+            elseBranch = try statement()
+        }
+        return .if(condition, thenBranch, elseBranch)
+    }
+
+    private func whileStatement() throws -> Stmt {
+        try consume(.left_paren, message: "Expect '(' after 'while'.")
+        let condition = try expression()
+        try consume(.right_paren, message: "Expect ')' after condition.")
+
+        let enclosingLoop = currentLoop
+        currentLoop = .loop
+
+        let body = try statement()
+        currentLoop = enclosingLoop
+        return .while(condition, body)
+    }
+
+    private func forStatement() throws -> Stmt {
+        try consume(.left_paren, message: "Expect '(' after 'for'.")
+        var initializer: Stmt?
+        if match(.semicolon) {
+            initializer = nil
+        } else if match(.var) {
+            initializer = try varDeclaration()
+        } else {
+            initializer = try expressionStatement()
+        }
+
+        var condition: Expr? = nil
+        if !check(.semicolon) {
+            condition = try expression()
+        }
+        try consume(.semicolon, message: "Expect ';' after loop condition.")
+
+        var increment: Expr? = nil
+        if !check(.right_paren) {
+            increment = try expression()
+        }
+        try consume(.right_paren, message: "Expect ')' after for clauses.")
+
+        let enclosingLoop = currentLoop
+        currentLoop = .loop
+        var body: Stmt = try statement()
+        if let increment = increment {
+            body = .block([body, .expression(increment)])
+        }
+        currentLoop = enclosingLoop
+
+        if condition == nil {
+            condition = .literal(value: true)
+        }
+        body = .while(condition!, body)
+
+        if let initializer = initializer {
+            body = .block([initializer, body])
+        }
+
+        return body
+    }
+
+    private func breakStatement() throws -> Stmt {
+        if currentLoop == .none {
+            Lox.error(at: previous(), message: "'break' statement should be inside a loop.")
+        }
+        try consume(.semicolon, message: "Expect ';' after break.")
+        return .break
+    }
+
     private func expressionStatement() throws -> Stmt {
         let expr: Expr = try expression()
         if allowExpression, isEnd() {
             return .print(expr)
         }
-        try consume(.semicolon, message: "Expected ';' after expression.")
+        try consume(.semicolon, message: "Expect ';' after expression.")
         return .expression(expr)
     }
 
@@ -118,13 +209,37 @@ class Parser {
     }
 
     private func conditional() throws -> Expr {
-        var expr = try equality()
+        var expr = try logic_or()
 
         if match(.question) {
             let then_branch = try expression()
             try consume(.colon, message: "Expect ':' after then branch of conditional expression.")
             let else_branch = try conditional()
             expr = .ternary(condition: expr, then_branch, else_branch)
+        }
+
+        return expr
+    }
+
+    private func logic_or() throws -> Expr {
+        var expr = try logic_and()
+
+        while match(.or) {
+            let op: Token = previous()
+            let right = try logic_and()
+            expr = .logical(left: expr, operator: op, right: right)
+        }
+
+        return expr
+    }
+
+    private func logic_and() throws -> Expr {
+        var expr = try equality()
+
+        while match(.and) {
+            let op: Token = previous()
+            let right = try equality()
+            expr = .logical(left: expr, operator: op, right: right)
         }
 
         return expr

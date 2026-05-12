@@ -25,6 +25,7 @@ class Scanner {
         "true": .`true`,
         "var": .var,
         "while": .while,
+        "break": .break,
     ]
 
     init(_ source: String) {

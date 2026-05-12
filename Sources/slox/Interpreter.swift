@@ -45,6 +45,24 @@ class Interpreter {
             }
         case let .block(statements):
             try executeBlock(statements, Environment(enclosing: environment))
+        case let .if(condition, thenBranch, elseBranch):
+            if try isTruthy(eval(condition)) {
+                try execute(thenBranch)
+            } else {
+                if let elseBranch = elseBranch {
+                    try execute(elseBranch)
+                }
+            }
+        case let .while(condition, body):
+            while try isTruthy(eval(condition)) {
+                do {
+                    try execute(body)
+                } catch is ControlFlow {
+                    break
+                }
+            }
+        case .break:
+            throw ControlFlow.breakStatement
         }
     }
 
@@ -68,6 +86,19 @@ class Interpreter {
             let value = try eval(expr)
             try environment.assign(name, value)
             return value
+
+        case let .logical(leftExpr, op, rightEpxr):
+            let leftVal = try eval(leftExpr)
+            if op.type == .or {
+                if isTruthy(leftVal) {
+                    return leftVal
+                }
+            } else {
+                if !isTruthy(leftVal) {
+                    return leftVal
+                }
+            }
+            return try eval(rightEpxr)
 
         case let .literal(value):
             if let num = value as? Double {
