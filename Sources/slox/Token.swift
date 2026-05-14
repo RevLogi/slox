@@ -10,6 +10,7 @@ enum TokenType {
     case less, less_equal
 
     case identifier, string, number
+    case lambda
 
     case and, `class`, `else`, `false`, fun, `for`, `if`, `nil`, or
     case print, `return`, `super`, this, `true`, `var`, `while`

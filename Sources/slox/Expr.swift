@@ -4,11 +4,13 @@ indirect enum Expr {
     case assign(name: Token, expr: Expr)
     case logical(left: Expr, operator: Token, right: Expr)
     case binary(left: Expr, operator: Token, right: Expr)
+    case call(_ callee: Expr, _ paren: Token, _ arguments: [Expr])
     case grouping(expression: Expr)
     case literal(value: Any?)
     case unary(operator: Token, right: Expr)
     case ternary(condition: Expr, _ then_branch: Expr, _ else_branch: Expr)
     case variable(name: Token)
+    case lambda(_ params: [Token], _ body: [Stmt])
 }
 
 extension Expr: CustomStringConvertible {

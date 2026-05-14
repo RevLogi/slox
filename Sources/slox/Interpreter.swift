@@ -2,7 +2,11 @@ import Foundation
 
 @MainActor
 class Interpreter {
-    private var environment = Environment()
+    var environment = Environment()
+
+    init() {
+        environment.define("clock", .callable(NativeFunction(arity: 0) { _, _ in .number(Date.timeIntervalSinceReferenceDate) }))
+    }
 
     func interpret(_ statements: [Stmt]) {
         do {
@@ -26,6 +30,8 @@ class Interpreter {
             return String(bool)
         case let .string(str):
             return str
+        case let .callable(callable):
+            return String(describing: callable)
         }
     }
 
@@ -63,10 +69,19 @@ class Interpreter {
             }
         case .break:
             throw ControlFlow.breakStatement
+        case let .function(name, params, body):
+            let function = LoxFunction(name, params, body, closure: environment)
+            environment.define(name.lexeme, .callable(function))
+        case let .return(_, expr):
+            var value: LoxValue = .nil
+            if let expr = expr {
+                value = try eval(expr)
+            }
+            throw Return(value: value)
         }
     }
 
-    private func executeBlock(_ statements: [Stmt?], _ environment: Environment) throws {
+    func executeBlock(_ statements: [Stmt?], _ environment: Environment) throws {
         let previous: Environment = self.environment
         defer {
             self.environment = previous
@@ -184,6 +199,23 @@ class Interpreter {
 
         case let .variable(name):
             return try environment.get(name)
+
+        case let .call(calleeExpr, paren, argumentsExpr):
+            let callee = try eval(calleeExpr)
+            let args = try argumentsExpr.map { try eval($0) }
+
+            if case let .callable(function) = callee {
+                if args.count != function.arity {
+                    throw RuntimeError(token: paren, message: "Expect \(function.arity) arguments but got \(args.count).")
+                }
+                return try function.call(interpreter: self, args)
+            } else {
+                throw RuntimeError(token: paren, message: "Can only call functions and calsses.")
+            }
+
+        case let .lambda(params, body):
+            let lambda = LoxFunction(params, body, closure: environment)
+            return .callable(lambda)
         }
     }
 
@@ -239,6 +271,7 @@ class Interpreter {
         case .number, .string: return true
         case let .boolean(bool): return bool
         case .nil: return false
+        case .callable: return true
         }
     }
 

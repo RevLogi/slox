@@ -36,11 +36,52 @@ class Parser {
             if match(.var) {
                 return try varDeclaration()
             }
+            if match(.fun) {
+                return try function("function")
+            }
             return try statement()
         } catch {
             synchronize()
             return nil
         }
+    }
+
+    private func function(_ kind: String) throws -> Stmt {
+        let name = try consume(.identifier, message: "Expect \(kind) name.")
+        let parameters = try getParams(kind)
+        let body = try getBody(name, kind)
+        return .function(name, parameters, body)
+    }
+
+    private func lambda() throws -> Expr {
+        let parameters = try getParams("lambda")
+        let body = try getBody(peek(), "lambda")
+        return .lambda(parameters, body)
+    }
+
+    private func getParams(_ kind: String) throws -> [Token] {
+        try consume(.left_paren, message: "Expect '(' after \(kind) name.")
+        var parameters: [Token] = []
+        if !check(.right_paren) {
+            repeat {
+                if parameters.count >= 255 {
+                    Lox.error(at: peek(), message: "Can't have more than 255 parameters.")
+                }
+
+                try parameters.append(consume(.identifier, message: "Expect parameter name."))
+            } while match(.comma)
+        }
+        try consume(.right_paren, message: "Expect ')' after parameters.")
+        return parameters
+    }
+
+    private func getBody(_ name: Token, _ kind: String) throws -> [Stmt] {
+        try consume(.left_brace, message: "Expect '{' before \(kind) body.")
+        let block: Stmt = try block()
+        guard case let .block(body) = block else {
+            throw error(at: name, message: "Expect \(kind) body to be a block.")
+        }
+        return body
     }
 
     private func varDeclaration() throws -> Stmt {
@@ -74,16 +115,32 @@ class Parser {
         if match(.break) {
             return try breakStatement()
         }
+        if match(.return) {
+            return try returnStatement()
+        }
         return try expressionStatement()
     }
 
     private func block() throws -> Stmt {
-        var statements: [Stmt?] = []
+        var statements: [Stmt] = []
         while !check(.right_brace), !isEnd() {
-            try statements.append(declaration() ?? nil)
+            if let decl = try declaration() {
+                statements.append(decl)
+            }
         }
         try consume(.right_brace, message: "Expected '}' after block.")
         return .block(statements)
+    }
+
+    private func returnStatement() throws -> Stmt {
+        let keyword = previous()
+        var value: Expr? = nil
+        if !check(.semicolon) {
+            value = try expression()
+        }
+
+        try consume(.semicolon, message: "Expect ';' after return value.")
+        return .return(keyword, value)
     }
 
     private func printStatement() throws -> Stmt {
@@ -300,13 +357,44 @@ class Parser {
             return .unary(operator: op, right: right)
         }
 
-        return try primary()
+        return try call()
+    }
+
+    private func call() throws -> Expr {
+        var expr = try primary()
+        while true {
+            if match(.left_paren) {
+                expr = try finishCall(callee: expr)
+            } else {
+                break
+            }
+        }
+        return expr
+    }
+
+    private func finishCall(callee: Expr) throws -> Expr {
+        var arguments: [Expr] = []
+        if !check(.right_paren) {
+            repeat {
+                if arguments.count >= 255 {
+                    Lox.error(at: peek(), message: "Can't have more than 255 arguments.")
+                }
+                try arguments.append(expression())
+            } while match(.comma)
+        }
+
+        let paren = try consume(.right_paren, message: "Expect ')' after arguments.")
+        return .call(callee, paren, arguments)
     }
 
     private func primary() throws -> Expr {
         if match(.false) { return .literal(value: false) }
         if match(.true) { return .literal(value: true) }
         if match(.nil) { return .literal(value: nil) }
+
+        if match(.lambda) {
+            return try lambda()
+        }
 
         if match(.number, .string) {
             return .literal(value: previous().literal)
