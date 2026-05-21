@@ -3,9 +3,28 @@ import Foundation
 @MainActor
 class Interpreter {
     var environment = Environment()
+    var locals: [UUID: (depth: Int, index: Int)] = [:]
 
     init() {
         environment.define("clock", .callable(NativeFunction(arity: 0) { _, _ in .number(Date.timeIntervalSinceReferenceDate) }))
+    }
+
+    func resolve(_ expr: Expr, _ depth: Int, _ index: Int) {
+        if case let .variable(_, id) = expr {
+            locals[id] = (depth, index)
+        }
+        if case let .assign(_, _, id) = expr {
+            locals[id] = (depth, index)
+        }
+    }
+
+    func lookupVariable(_ name: Token, _ id: UUID) throws -> LoxValue {
+        let place = locals[id]
+        if let (depth, index) = place {
+            return environment.getAt(depth, index)
+        } else {
+            return try environment.get(name)
+        }
     }
 
     func interpret(_ statements: [Stmt]) {
@@ -47,7 +66,7 @@ class Interpreter {
                 let value = try eval(expr)
                 environment.define(name.lexeme, value)
             } else {
-                environment.define(name.lexeme, nil)
+                environment.define(name.lexeme, .nil)
             }
         case let .block(statements):
             try executeBlock(statements, Environment(enclosing: environment))
@@ -97,9 +116,14 @@ class Interpreter {
 
     func eval(_ expr: Expr) throws -> LoxValue {
         switch expr {
-        case let .assign(name, expr):
+        case let .assign(name, expr, id):
             let value = try eval(expr)
-            try environment.assign(name, value)
+            let place = locals[id]
+            if let (depth, index) = place {
+                environment.assignAt(depth, index, value)
+            } else {
+                try environment.assign(name, value)
+            }
             return value
 
         case let .logical(leftExpr, op, rightEpxr):
@@ -138,7 +162,7 @@ class Interpreter {
                 if case let .number(num) = expr {
                     return .number(-num)
                 } else {
-                    return .nil
+                    throw RuntimeError(token: op, message: "Operand must be a number.")
                 }
             default: return .nil
             }
@@ -184,6 +208,8 @@ class Interpreter {
                 return .boolean(!isEqual(left, right))
             case .equal_equal:
                 return .boolean(isEqual(left, right))
+            case .comma:
+                return right
             default: return .nil
             }
 
@@ -197,8 +223,8 @@ class Interpreter {
             }
             return expr
 
-        case let .variable(name):
-            return try environment.get(name)
+        case let .variable(name, id):
+            return try lookupVariable(name, id)
 
         case let .call(calleeExpr, paren, argumentsExpr):
             let callee = try eval(calleeExpr)

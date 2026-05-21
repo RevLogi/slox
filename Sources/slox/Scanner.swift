@@ -129,9 +129,9 @@ class Scanner {
 
         if isEnd() {
             Lox.error(line: line, message: "Unterminated string.")
+        } else {
+            advance()
         }
-
-        advance()
 
         let value = String(source[start + 1 ..< current - 1])
         addToken(type: .string, literal: value)

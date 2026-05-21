@@ -1,7 +1,7 @@
 import Foundation
 
 indirect enum Expr {
-    case assign(name: Token, expr: Expr)
+    case assign(name: Token, expr: Expr, _ id: UUID)
     case logical(left: Expr, operator: Token, right: Expr)
     case binary(left: Expr, operator: Token, right: Expr)
     case call(_ callee: Expr, _ paren: Token, _ arguments: [Expr])
@@ -9,7 +9,7 @@ indirect enum Expr {
     case literal(value: Any?)
     case unary(operator: Token, right: Expr)
     case ternary(condition: Expr, _ then_branch: Expr, _ else_branch: Expr)
-    case variable(name: Token)
+    case variable(name: Token, id: UUID = UUID())
     case lambda(_ params: [Token], _ body: [Stmt])
 }
 

@@ -256,8 +256,8 @@ class Parser {
         if match(.equal) {
             let equals: Token = previous()
             let value: Expr = try assignment()
-            if case let .variable(name) = expr {
-                return .assign(name: name, expr: value)
+            if case let .variable(name, id) = expr {
+                return .assign(name: name, expr: value, id)
             }
 
             throw error(at: equals, message: "Invalid assignment target.")

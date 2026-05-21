@@ -54,24 +54,37 @@ struct Lox {
             return
         }
 
+        let resolver = Resolver(interpreter)
+        resolver.resolve(statements)
+        if hadError { return }
+
         interpreter.interpret(statements)
     }
 
     static func error(line: Int, message: String) {
-        report(line: line, where: "", message: message)
+        report(line: line, where: "", message: message, err: true)
     }
 
     static func error(at token: Token, message: String) {
         if token.type == .eof {
-            report(line: token.line, where: " at End", message: message)
+            report(line: token.line, where: " at End", message: message, err: true)
         } else {
-            report(line: token.line, where: "at \(token.lexeme)", message: message)
+            report(line: token.line, where: "at \(token.lexeme)", message: message, err: true)
         }
     }
 
-    private static func report(line: Int, where: String, message: String) {
-        fputs("[line \(line)] Error \(`where`): \(message)\n", stderr)
-        hadError = true
+    static func warn(at token: Token, message: String) {
+        if token.type == .eof {
+            report(line: token.line, where: " at End", message: message, err: false)
+        } else {
+            report(line: token.line, where: "at \(token.lexeme)", message: message, err: false)
+        }
+    }
+
+    private static func report(line: Int, where: String, message: String, err: Bool) {
+        let type: String = err ? "Error" : "Warning"
+        fputs("[line \(line)] \(type) \(`where`): \(message)\n", stderr)
+        hadError = err
     }
 
     static func runtimeError(_ error: RuntimeError) {
