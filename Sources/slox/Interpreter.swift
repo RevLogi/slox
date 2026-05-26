@@ -10,11 +10,14 @@ class Interpreter {
     }
 
     func resolve(_ expr: Expr, _ depth: Int, _ index: Int) {
-        if case let .variable(_, id) = expr {
+        switch expr {
+        case let .variable(_, id),
+             let .this(_, id),
+             let .assign(_, _, id):
             locals[id] = (depth, index)
-        }
-        if case let .assign(_, _, id) = expr {
-            locals[id] = (depth, index)
+
+        default:
+            break
         }
     }
 
@@ -51,16 +54,34 @@ class Interpreter {
             return str
         case let .callable(callable):
             return String(describing: callable)
+        case let .class(className):
+            return String(describing: className)
+        case let .instance(instance):
+            return String(describing: instance)
         }
     }
 
     func execute(_ statement: Stmt) throws {
         switch statement {
+        case let .class(name, classMethods):
+            // Define then assign
+            // Allow self-reference
+            environment.define(name.lexeme, .nil)
+            var methods: [String: LoxFunction] = [:]
+            for case let .function(name, params, body) in classMethods {
+                let function = LoxFunction(name, params, body, closure: environment, isInitializer: name.lexeme == "init")
+                methods[name.lexeme] = function
+            }
+            let klass = LoxClass(name.lexeme, methods)
+            try environment.assign(name, .class(klass))
+
         case let .print(expr):
             let value: LoxValue = try eval(expr)
             print(stringify(value))
+
         case let .expression(expr):
             let _: LoxValue = try eval(expr)
+
         case let .var(name, expression):
             if let expr = expression {
                 let value = try eval(expr)
@@ -68,8 +89,10 @@ class Interpreter {
             } else {
                 environment.define(name.lexeme, .nil)
             }
+
         case let .block(statements):
             try executeBlock(statements, Environment(enclosing: environment))
+
         case let .if(condition, thenBranch, elseBranch):
             if try isTruthy(eval(condition)) {
                 try execute(thenBranch)
@@ -78,6 +101,7 @@ class Interpreter {
                     try execute(elseBranch)
                 }
             }
+
         case let .while(condition, body):
             while try isTruthy(eval(condition)) {
                 do {
@@ -86,11 +110,14 @@ class Interpreter {
                     break
                 }
             }
+
         case .break:
             throw ControlFlow.breakStatement
+
         case let .function(name, params, body):
-            let function = LoxFunction(name, params, body, closure: environment)
+            let function = LoxFunction(name, params, body, closure: environment, isInitializer: false)
             environment.define(name.lexeme, .callable(function))
+
         case let .return(_, expr):
             var value: LoxValue = .nil
             if let expr = expr {
@@ -116,6 +143,26 @@ class Interpreter {
 
     func eval(_ expr: Expr) throws -> LoxValue {
         switch expr {
+        case let .set(object, name, value):
+            let object = try eval(object)
+            guard case let .instance(instance) = object else {
+                throw RuntimeError(token: name,
+                                   message: "Only instances have fields.")
+            }
+            let value = try eval(value)
+            instance.set(name, value)
+            return value
+
+        case let .get(object, name):
+            let object = try eval(object)
+            if case let .instance(instance) = object {
+                return try instance.get(name)
+            }
+            return .nil
+
+        case let .this(keyword, id):
+            return try lookupVariable(keyword, id)
+
         case let .assign(name, expr, id):
             let value = try eval(expr)
             let place = locals[id]
@@ -235,12 +282,17 @@ class Interpreter {
                     throw RuntimeError(token: paren, message: "Expect \(function.arity) arguments but got \(args.count).")
                 }
                 return try function.call(interpreter: self, args)
+            } else if case let .class(klass) = callee {
+                if args.count != klass.arity {
+                    throw RuntimeError(token: paren, message: "Expect \(klass.arity) arguments but got \(args.count).")
+                }
+                return try klass.call(interpreter: self, args)
             } else {
-                throw RuntimeError(token: paren, message: "Can only call functions and calsses.")
+                throw RuntimeError(token: paren, message: "Can only call functions and classes.")
             }
 
         case let .lambda(params, body):
-            let lambda = LoxFunction(params, body, closure: environment)
+            let lambda = LoxFunction(params, body, closure: environment, isInitializer: false)
             return .callable(lambda)
         }
     }
@@ -298,6 +350,7 @@ class Interpreter {
         case let .boolean(bool): return bool
         case .nil: return false
         case .callable: return true
+        default: return true
         }
     }
 

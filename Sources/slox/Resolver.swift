@@ -18,10 +18,15 @@ class Resolver {
     }
 
     private enum FunctionType {
-        case none, function
+        case none, function, initializer, method
+    }
+
+    private enum ClassType {
+        case none, `class`
     }
 
     private var currentFunction: FunctionType = .none
+    private var currentClass: ClassType = .none
 
     init(_ interpreter: Interpreter) {
         self.interpreter = interpreter
@@ -35,6 +40,35 @@ class Resolver {
 
     func resolve(_ statement: Stmt) {
         switch statement {
+        case let .class(name, methods):
+            let enclosingClass = currentClass
+            currentClass = .class
+
+            declare(name)
+            define(name)
+
+            beginScope()
+            let scopeIndex = scopes.count - 1
+            let thisIndex = scopes[scopeIndex].nextIndex
+            scopes[scopeIndex].nextIndex += 1
+            scopes[scopeIndex].variables["this"] = VariableState(
+                name: name,
+                isDefined: true,
+                isRead: true,
+                index: thisIndex
+            )
+
+            for case let .function(name, params, body) in methods {
+                var declaration: FunctionType = .method
+                if name.lexeme == "init" {
+                    declaration = .initializer
+                }
+                resolveFunction(params, body, declaration)
+            }
+            endScope()
+
+            currentClass = enclosingClass
+
         case let .block(statements):
             beginScope()
             resolve(statements)
@@ -69,6 +103,9 @@ class Resolver {
             if case .none = currentFunction {
                 Lox.error(at: keyword, message: "Can't return from top-level code.")
             }
+            if case .initializer = currentFunction {
+                Lox.error(at: keyword, message: "Can't return a value from an initializer.")
+            }
             if let expr = expr {
                 resolve(expr: expr)
             }
@@ -84,6 +121,13 @@ class Resolver {
 
     func resolve(expr: Expr) {
         switch expr {
+        case let .this(keyword, _):
+            if currentClass == .none {
+                Lox.error(at: keyword, message: "Can't use 'this' outside of a class.")
+                break
+            }
+            resolveLocal(expr, keyword)
+
         case let .variable(name, _):
             if let scope = scopes.last, scope.variables[name.lexeme]?.isDefined == false {
                 Lox.error(at: name, message: "Can't read local variable in its own initializer.")
@@ -121,6 +165,13 @@ class Resolver {
 
         case let .lambda(params, body):
             resolveFunction(params, body, .function)
+
+        case let .get(object, _):
+            resolve(expr: object)
+
+        case let .set(object, _, value):
+            resolve(expr: value)
+            resolve(expr: object)
 
         default:
             return

@@ -33,6 +33,9 @@ class Parser {
 
     private func declaration() throws -> Stmt? {
         do {
+            if match(.class) {
+                return try classDeclaration()
+            }
             if match(.var) {
                 return try varDeclaration()
             }
@@ -84,14 +87,27 @@ class Parser {
         return body
     }
 
+    private func classDeclaration() throws -> Stmt {
+        let name: Token = try consume(.identifier, message: "Expect class name.")
+        try consume(.left_brace, message: "Expect '{' before class body.")
+
+        var methods: [Stmt] = []
+        while !check(.right_brace), !isEnd() {
+            try methods.append(function("method"))
+        }
+        try consume(.right_brace, message: "Expect '}' after class body.")
+
+        return .class(name, methods)
+    }
+
     private func varDeclaration() throws -> Stmt {
-        let name: Token = try consume(.identifier, message: "Expected variable name.")
+        let name: Token = try consume(.identifier, message: "Expect variable name.")
         var initializer: Expr? = nil
         if match(.equal) {
             initializer = try expression()
         }
         if !allowExpression {
-            try consume(.semicolon, message: "Expected ';' after variable declaration.")
+            try consume(.semicolon, message: "Expect ';' after variable declaration.")
         }
         return .var(name, expression: initializer)
     }
@@ -258,6 +274,8 @@ class Parser {
             let value: Expr = try assignment()
             if case let .variable(name, id) = expr {
                 return .assign(name: name, expr: value, id)
+            } else if case let .get(object, name) = expr {
+                return .set(object, name, value)
             }
 
             throw error(at: equals, message: "Invalid assignment target.")
@@ -361,10 +379,13 @@ class Parser {
     }
 
     private func call() throws -> Expr {
-        var expr = try primary()
+        var expr: Expr = try primary()
         while true {
             if match(.left_paren) {
                 expr = try finishCall(callee: expr)
+            } else if match(.dot) {
+                let name = try consume(.identifier, message: "Expect property name after'.'")
+                expr = .get(expr, name)
             } else {
                 break
             }
@@ -391,6 +412,8 @@ class Parser {
         if match(.false) { return .literal(value: false) }
         if match(.true) { return .literal(value: true) }
         if match(.nil) { return .literal(value: nil) }
+
+        if match(.this) { return .this(previous()) }
 
         if match(.lambda) {
             return try lambda()

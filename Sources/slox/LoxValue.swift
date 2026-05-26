@@ -5,6 +5,8 @@ enum LoxValue: @unchecked Sendable {
     case string(String)
     case boolean(Bool)
     case `nil`
+    case `class`(LoxClass)
+    case instance(LoxInstance)
 
     case callable(any LoxCallable)
 }

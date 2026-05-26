@@ -1,0 +1,8 @@
+Extra features:
+Continue
+Use function that is defined after where it is called
+No semicolon
+
+id -> (depth, index)
+depth -> which closure it is in
+index -> which variable it is in this closure

@@ -1,6 +1,7 @@
 import Foundation
 
 indirect enum Stmt {
+    case `class`(_ name: Token, _ methods: [Stmt])
     case expression(_ expression: Expr)
     case function(_ name: Token, _ params: [Token], _ body: [Stmt])
     case `return`(_ keyword: Token, _ value: Expr?)
