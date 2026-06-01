@@ -1,9 +1,10 @@
 import Foundation
 
 indirect enum Stmt {
-    case `class`(_ name: Token, _ methods: [Stmt])
+    case `class`(_ name: Token, _ superClass: Expr?, _ instanceMethods: [Stmt], _ staticMethods: [Stmt])
     case expression(_ expression: Expr)
-    case function(_ name: Token, _ params: [Token], _ body: [Stmt])
+    case function(_ name: Token, _ params: [Token]?, _ body: [Stmt])
+
     case `return`(_ keyword: Token, _ value: Expr?)
     case `if`(_ condition: Expr, _ thenBranch: Stmt, _ elseBranch: Stmt?)
     case print(_ expression: Expr)

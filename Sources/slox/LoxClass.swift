@@ -1,16 +1,25 @@
 import Foundation
 
-class LoxClass: LoxCallable {
+class LoxClass: LoxInstance, LoxCallable {
     let name: String
     let methods: [String: LoxFunction]
+    let superClass: LoxClass?
 
-    init(_ name: String, _ methods: [String: LoxFunction]) {
+    init(_ name: String, _ superClass: LoxClass?, _ methods: [String: LoxFunction], _ klass: LoxClass?) {
+        self.superClass = superClass
         self.name = name
         self.methods = methods
+        super.init(klass)
     }
 
     func findMethod(_ name: String) -> LoxFunction? {
-        return methods[name]
+        if let method = methods[name] {
+            return method
+        }
+        if let superClass = superClass {
+            return superClass.findMethod(name)
+        }
+        return nil
     }
 
     func call(interpreter: Interpreter, _ arguments: [LoxValue]) throws -> LoxValue {
@@ -27,10 +36,8 @@ class LoxClass: LoxCallable {
         }
         return initializer.arity
     }
-}
 
-extension LoxClass: CustomStringConvertible {
-    nonisolated var description: String {
+    override nonisolated var description: String {
         return name
     }
 }

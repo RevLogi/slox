@@ -51,7 +51,12 @@ class Parser {
 
     private func function(_ kind: String) throws -> Stmt {
         let name = try consume(.identifier, message: "Expect \(kind) name.")
-        let parameters = try getParams(kind)
+        // nil represents getter method
+        // [] represents no argument
+        var parameters: [Token]? = nil
+        if kind != "method" || check(.left_paren) {
+            parameters = try getParams(kind)
+        }
         let body = try getBody(name, kind)
         return .function(name, parameters, body)
     }
@@ -89,15 +94,27 @@ class Parser {
 
     private func classDeclaration() throws -> Stmt {
         let name: Token = try consume(.identifier, message: "Expect class name.")
+
+        var superClass: Expr? = nil
+        if match(.less) {
+            try consume(.identifier, message: "Expect superclass name.")
+            superClass = .variable(name: previous())
+        }
+
         try consume(.left_brace, message: "Expect '{' before class body.")
 
-        var methods: [Stmt] = []
+        var instanceMethods: [Stmt] = []
+        var staticMethods: [Stmt] = []
         while !check(.right_brace), !isEnd() {
-            try methods.append(function("method"))
+            if match(.class) {
+                try staticMethods.append(function("method"))
+            } else {
+                try instanceMethods.append(function("method"))
+            }
         }
         try consume(.right_brace, message: "Expect '}' after class body.")
 
-        return .class(name, methods)
+        return .class(name, superClass, instanceMethods, staticMethods)
     }
 
     private func varDeclaration() throws -> Stmt {
@@ -413,6 +430,12 @@ class Parser {
         if match(.true) { return .literal(value: true) }
         if match(.nil) { return .literal(value: nil) }
 
+        if match(.super) {
+            let keyword: Token = previous()
+            try consume(.dot, message: "Expect '.' after 'super'.")
+            let method: Token = try consume(.identifier, message: "Expect superclass method name.")
+            return .super(keyword, method)
+        }
         if match(.this) { return .this(previous()) }
 
         if match(.lambda) {

@@ -22,7 +22,7 @@ class Resolver {
     }
 
     private enum ClassType {
-        case none, `class`
+        case none, `class`, subclass
     }
 
     private var currentFunction: FunctionType = .none
@@ -40,12 +40,37 @@ class Resolver {
 
     func resolve(_ statement: Stmt) {
         switch statement {
-        case let .class(name, methods):
+        case let .class(name, superClass, instanceMethods, staticMethods):
+            if let superClass = superClass {
+                resolve(expr: superClass)
+            }
+
+            let methods = instanceMethods + staticMethods
             let enclosingClass = currentClass
             currentClass = .class
 
             declare(name)
             define(name)
+
+            if case let .variable(superClassName, _) = superClass {
+                if superClassName.lexeme == name.lexeme {
+                    Lox.error(at: superClassName, message: "A class can't inherit from itself.")
+                }
+            }
+
+            if superClass != nil {
+                currentClass = .subclass
+                beginScope()
+                let scopeIndex = scopes.count - 1
+                let superIndex = scopes[scopeIndex].nextIndex
+                scopes[scopeIndex].nextIndex += 1
+                scopes[scopeIndex].variables["super"] = VariableState(
+                    name: name,
+                    isDefined: true,
+                    isRead: true,
+                    index: superIndex
+                )
+            }
 
             beginScope()
             let scopeIndex = scopes.count - 1
@@ -66,6 +91,10 @@ class Resolver {
                 resolveFunction(params, body, declaration)
             }
             endScope()
+
+            if superClass != nil {
+                endScope()
+            }
 
             currentClass = enclosingClass
 
@@ -121,6 +150,12 @@ class Resolver {
 
     func resolve(expr: Expr) {
         switch expr {
+        case let .super(keyword, _, _):
+            if currentClass != .subclass {
+                Lox.error(at: keyword, message: "Can't use 'super' with no superclass")
+            }
+            resolveLocal(expr, keyword)
+
         case let .this(keyword, _):
             if currentClass == .none {
                 Lox.error(at: keyword, message: "Can't use 'this' outside of a class.")
@@ -189,12 +224,12 @@ class Resolver {
         }
     }
 
-    private func resolveFunction(_ params: [Token], _ body: [Stmt], _ type: FunctionType) {
+    private func resolveFunction(_ params: [Token]?, _ body: [Stmt], _ type: FunctionType) {
         let enclosingFunction = currentFunction
         currentFunction = type
 
         beginScope()
-        for param in params {
+        for param in params ?? [] {
             declare(param)
             define(param)
         }

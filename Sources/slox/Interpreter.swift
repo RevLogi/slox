@@ -6,14 +6,18 @@ class Interpreter {
     var locals: [UUID: (depth: Int, index: Int)] = [:]
 
     init() {
+        // Prepare native function
         environment.define("clock", .callable(NativeFunction(arity: 0) { _, _ in .number(Date.timeIntervalSinceReferenceDate) }))
     }
 
+    /// Recieve information from resolver
+    /// Store place information for local variables
     func resolve(_ expr: Expr, _ depth: Int, _ index: Int) {
         switch expr {
         case let .variable(_, id),
              let .this(_, id),
-             let .assign(_, _, id):
+             let .assign(_, _, id),
+             let .super(_, _, id):
             locals[id] = (depth, index)
 
         default:
@@ -63,16 +67,47 @@ class Interpreter {
 
     func execute(_ statement: Stmt) throws {
         switch statement {
-        case let .class(name, classMethods):
+        case let .class(name, superClassName, classInstanceMethods, classStaticMethods):
+            var superClassVal: LoxValue? = nil
+            var actualSuperClass: LoxClass? = nil
+            if let superClassName = superClassName {
+                superClassVal = try eval(superClassName)
+                guard case let .class(extractedClass) = superClassVal else {
+                    if case let .variable(name, _) = superClassName {
+                        throw RuntimeError(token: name, message: "Superclass must be a class.")
+                    }
+                    throw RuntimeError(token: name, message: "Superclass must be a class.")
+                }
+                actualSuperClass = extractedClass
+            }
+
             // Define then assign
             // Allow self-reference
             environment.define(name.lexeme, .nil)
-            var methods: [String: LoxFunction] = [:]
-            for case let .function(name, params, body) in classMethods {
-                let function = LoxFunction(name, params, body, closure: environment, isInitializer: name.lexeme == "init")
-                methods[name.lexeme] = function
+            var instanceMethods: [String: LoxFunction] = [:]
+            var staticMethods: [String: LoxFunction] = [:]
+
+            let methodClosure: Environment
+            if actualSuperClass != nil {
+                let superEnv = Environment(enclosing: environment)
+                superEnv.define("super", .class(actualSuperClass!))
+                methodClosure = superEnv
+            } else {
+                methodClosure = environment
             }
-            let klass = LoxClass(name.lexeme, methods)
+
+            for case let .function(name, params, body) in classInstanceMethods {
+                let function = LoxFunction(name, params, body, closure: methodClosure, isInitializer: name.lexeme == "init")
+                instanceMethods[name.lexeme] = function
+            }
+            for case let .function(name, params, body) in classStaticMethods {
+                let function = LoxFunction(name, params, body, closure: methodClosure, isInitializer: name.lexeme == "init")
+                staticMethods[name.lexeme] = function
+            }
+
+            let metaClass = LoxClass("type", nil, staticMethods, nil)
+            let klass = LoxClass(name.lexeme, actualSuperClass, instanceMethods, metaClass)
+
             try environment.assign(name, .class(klass))
 
         case let .print(expr):
@@ -143,6 +178,28 @@ class Interpreter {
 
     func eval(_ expr: Expr) throws -> LoxValue {
         switch expr {
+        case let .super(keyword, methodName, id):
+            let (depth, _) = locals[id]!
+            let superClassVal = environment.getAt(depth, 0)
+            guard case let .class(superClass) = superClassVal else {
+                throw RuntimeError(token: keyword, message: "Superclass must be a class.")
+            }
+            // 'this' is always at depth-1, index 0
+            let thisVal = environment.getAt(depth - 1, 0)
+            guard case let .instance(instance) = thisVal else {
+                throw RuntimeError(token: keyword, message: "Cannot find 'this' in super context.")
+            }
+
+            guard let method = superClass.findMethod(methodName.lexeme) else {
+                throw RuntimeError(token: keyword, message: "Undefined property \(methodName.lexeme).")
+            }
+
+            // Handle getter methods
+            if method.params == nil {
+                return try method.bind(instance).call(interpreter: self, [])
+            }
+            return .callable(method.bind(instance))
+
         case let .set(object, name, value):
             let object = try eval(object)
             guard case let .instance(instance) = object else {
@@ -156,7 +213,11 @@ class Interpreter {
         case let .get(object, name):
             let object = try eval(object)
             if case let .instance(instance) = object {
-                return try instance.get(name)
+                return try instance.get(name, interpreter: self)
+            }
+            // Allow using static method upon class
+            if case let .class(klass) = object {
+                return try klass.get(name, interpreter: self)
             }
             return .nil
 
@@ -292,7 +353,7 @@ class Interpreter {
             }
 
         case let .lambda(params, body):
-            let lambda = LoxFunction(params, body, closure: environment, isInitializer: false)
+            let lambda = LoxFunction(nil, params, body, closure: environment, isInitializer: false)
             return .callable(lambda)
         }
     }
