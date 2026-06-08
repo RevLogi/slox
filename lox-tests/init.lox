@@ -1,8 +1,8 @@
 class Foo {
   init() {
-    print this;
+    print this
   }
 }
 
-var foo = Foo();
-print foo.init();
+var foo = Foo()
+print foo.init()

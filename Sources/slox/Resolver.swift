@@ -143,6 +143,18 @@ class Resolver {
             resolve(expr: condition)
             resolve(body)
 
+        case let .for(initializer, condition, increment, body):
+            beginScope()
+            if let initializer = initializer {
+                resolve(initializer)
+            }
+            resolve(expr: condition)
+            resolve(body)
+            if let increment = increment {
+                resolve(increment)
+            }
+            endScope()
+
         default:
             return
         }

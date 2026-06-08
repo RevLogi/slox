@@ -26,6 +26,7 @@ class Scanner {
         "var": .var,
         "while": .while,
         "break": .break,
+        "continue": .continue,
         "lambda": .lambda,
     ]
 

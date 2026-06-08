@@ -141,13 +141,43 @@ class Interpreter {
             while try isTruthy(eval(condition)) {
                 do {
                     try execute(body)
-                } catch is ControlFlow {
+                } catch ControlFlow.breakStatement {
                     break
+                } catch ControlFlow.continueStatement {
+                    continue
+                }
+            }
+
+        case let .for(initializer, condition, increment, body):
+            let forEnv = Environment(enclosing: environment)
+            let prevEnv = environment
+            environment = forEnv
+            defer { environment = prevEnv }
+
+            if let initializer = initializer {
+                try execute(initializer)
+            }
+            while try isTruthy(eval(condition)) {
+                do {
+                    try execute(body)
+                } catch ControlFlow.breakStatement {
+                    break
+                } catch ControlFlow.continueStatement {
+                    if let increment = increment {
+                        try execute(increment)
+                    }
+                    continue
+                }
+                if let increment = increment {
+                    try execute(increment)
                 }
             }
 
         case .break:
             throw ControlFlow.breakStatement
+
+        case .continue:
+            throw ControlFlow.continueStatement
 
         case let .function(name, params, body):
             let function = LoxFunction(name, params, body, closure: environment, isInitializer: false)

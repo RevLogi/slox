@@ -14,7 +14,7 @@ enum TokenType {
 
     case and, `class`, `else`, `false`, fun, `for`, `if`, `nil`, or
     case print, `return`, `super`, this, `true`, `var`, `while`
-    case `break`
+    case `break`, `continue`
     case eof
 }
 

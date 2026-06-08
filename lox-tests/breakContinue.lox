@@ -1,25 +1,29 @@
 // 3
-var i = 0;
+var i = 0
 while (i < 10) {
-  if (i == 3) break; 
-  i = i + 1;
+  if (i == 3) break 
+  i = i + 1
 }
-print i;
+print i
 
-// 0, 1, 2
+// 0, 2
 for (var j = 0; j < 5; j = j + 1) {
+  if (j == 1) {
+    continue
+  }
   if (j > 2) {
     {
-      break;
+      break
     }
   }
-  print j;
+  print j
 }
 
 // 0, 1, 2
 for (var x = 0; x < 3; x = x + 1) {
   for (var y = 0; y < 100; y = y + 1) {
-    break;
+    break
   }
-  print x; 
+  print x 
 }
+

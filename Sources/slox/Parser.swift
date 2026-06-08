@@ -123,9 +123,6 @@ class Parser {
         if match(.equal) {
             initializer = try expression()
         }
-        if !allowExpression {
-            try consume(.semicolon, message: "Expect ';' after variable declaration.")
-        }
         return .var(name, expression: initializer)
     }
 
@@ -148,6 +145,9 @@ class Parser {
         if match(.break) {
             return try breakStatement()
         }
+        if match(.continue) {
+            return try continueStatement()
+        }
         if match(.return) {
             return try returnStatement()
         }
@@ -168,17 +168,15 @@ class Parser {
     private func returnStatement() throws -> Stmt {
         let keyword = previous()
         var value: Expr? = nil
-        if !check(.semicolon) {
+        if !check(.right_brace), !isEnd() {
             value = try expression()
         }
 
-        try consume(.semicolon, message: "Expect ';' after return value.")
         return .return(keyword, value)
     }
 
     private func printStatement() throws -> Stmt {
         let value: Expr = try expression()
-        try consume(.semicolon, message: "Expected ';' after value.")
         return .print(value)
     }
 
@@ -218,6 +216,7 @@ class Parser {
         } else {
             initializer = try expressionStatement()
         }
+        try consume(.semicolon, message: "Expect ';' after loop condition.")
 
         var condition: Expr? = nil
         if !check(.semicolon) {
@@ -225,38 +224,41 @@ class Parser {
         }
         try consume(.semicolon, message: "Expect ';' after loop condition.")
 
-        var increment: Expr? = nil
+        var incrementExpr: Expr? = nil
         if !check(.right_paren) {
-            increment = try expression()
+            incrementExpr = try expression()
         }
         try consume(.right_paren, message: "Expect ')' after for clauses.")
 
         let enclosingLoop = currentLoop
         currentLoop = .loop
-        var body: Stmt = try statement()
-        if let increment = increment {
-            body = .block([body, .expression(increment)])
-        }
+        let body: Stmt = try statement()
         currentLoop = enclosingLoop
 
         if condition == nil {
             condition = .literal(value: true)
         }
-        body = .while(condition!, body)
 
-        if let initializer = initializer {
-            body = .block([initializer, body])
+        var increment: Stmt? = nil
+        if let incrementExpr = incrementExpr {
+            increment = .expression(incrementExpr)
         }
 
-        return body
+        return .for(initializer, condition!, increment, body)
     }
 
     private func breakStatement() throws -> Stmt {
         if currentLoop == .none {
             Lox.error(at: previous(), message: "'break' statement should be inside a loop.")
         }
-        try consume(.semicolon, message: "Expect ';' after break.")
         return .break
+    }
+
+    private func continueStatement() throws -> Stmt {
+        if currentLoop == .none {
+            Lox.error(at: previous(), message: "'continue' statement should be inside a loop.")
+        }
+        return .continue
     }
 
     private func expressionStatement() throws -> Stmt {
@@ -264,7 +266,6 @@ class Parser {
         if allowExpression, isEnd() {
             return .print(expr)
         }
-        try consume(.semicolon, message: "Expect ';' after expression.")
         return .expression(expr)
     }
 
@@ -531,10 +532,6 @@ class Parser {
         advance()
 
         while !isEnd() {
-            if previous().type == .semicolon {
-                return
-            }
-
             switch peek().type {
             case .class, .fun, .var, .for, .if, .while, .print, .return: return
             default: advance()
